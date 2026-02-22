@@ -1,2 +1,2 @@
 # kinetic-hand
-An open-source smart glove project mapping complex hand movements using 4 MPU6050 IMUs. Includes ESP32 firmware and a modern, glassmorphism web interface for live telemetry visualization.
+A real-time web dashboard and corresponding ESP-IDF firmware for a smart glove featuring 4x MPU6050 motion sensors. Designed with an aesthetic, low-latency UI using the Web Serial API.
