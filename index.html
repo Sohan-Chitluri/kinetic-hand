@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Glove Telemetry</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <div class="background">
+        <div class="glow glow-1"></div>
+        <div class="glow glow-2"></div>
+    </div>
+
+    <main class="dashboard">
+        <header class="glass-panel header">
+            <div>
+                <h1>Smart Glove Telemetry</h1>
+                <p>ESP32 Real-time Data Visualization</p>
+            </div>
+            <button id="connectBtn" class="primary-btn">Connect Serial</button>
+        </header>
+
+        <section class="imu-sensors">
+            <h2 class="glass-panel-title"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                    class="feather feather-activity">
+                    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                </svg> IMU Motion Data</h2>
+            <div class="imu-grid">
+                <!-- IMU 1 -->
+                <div class="glass-panel imu-card imu-highlight">
+                    <h3>IMU 1 <span>(Bus 0: 0x68)</span></h3>
+                    <div class="metrics">
+                        <div class="metric-group">
+                            <h4>Accelerometer</h4>
+                            <div class="metric-bar"><span>X</span>
+                                <div class="bar-track">
+                                    <div id="imu1-ax-bar" class="bar-fill ax-color"></div>
+                                </div> <span id="imu1-ax" class="val">0</span>
+                            </div>
+                            <div class="metric-bar"><span>Y</span>
+                                <div class="bar-track">
+                                    <div id="imu1-ay-bar" class="bar-fill ay-color"></div>
+                                </div> <span id="imu1-ay" class="val">0</span>
+                            </div>
+                            <div class="metric-bar"><span>Z</span>
+                                <div class="bar-track">
+                                    <div id="imu1-az-bar" class="bar-fill az-color"></div>
+                                </div> <span id="imu1-az" class="val">0</span>
+                            </div>
+                        </div>
+                        <div class="metric-group">
+                            <h4>Gyroscope</h4>
+                            <div class="metric-bar"><span>X</span>
+                                <div class="bar-track">
+                                    <div id="imu1-gx-bar" class="bar-fill gx-color"></div>
+                                </div> <span id="imu1-gx" class="val">0</span>
+                            </div>
+                            <div class="metric-bar"><span>Y</span>
+                                <div class="bar-track">
+                                    <div id="imu1-gy-bar" class="bar-fill gy-color"></div>
+                                </div> <span id="imu1-gy" class="val">0</span>
+                            </div>
+                            <div class="metric-bar"><span>Z</span>
+                                <div class="bar-track">
+                                    <div id="imu1-gz-bar" class="bar-fill gz-color"></div>
+                                </div> <span id="imu1-gz" class="val">0</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- IMU 2 -->
+                <div class="glass-panel imu-card imu-highlight">
+                    <h3>IMU 2 <span>(Bus 0: 0x69)</span></h3>
+                    <div class="metrics">
+                        <div class="metric-group">
+                            <h4>Accelerometer</h4>
+                            <div class="metric-bar"><span>X</span>
+                                <div class="bar-track">
+                                    <div id="imu2-ax-bar" class="bar-fill ax-color"></div>
+                                </div> <span id="imu2-ax" class="val">0</span>
+                            </div>
+                            <div class="metric-bar"><span>Y</span>
+                                <div class="bar-track">
+                                    <div id="imu2-ay-bar" class="bar-fill ay-color"></div>
+                                </div> <span id="imu2-ay" class="val">0</span>
+                            </div>
+                            <div class="metric-bar"><span>Z</span>
+                                <div class="bar-track">
+                                    <div id="imu2-az-bar" class="bar-fill az-color"></div>
+                                </div> <span id="imu2-az" class="val">0</span>
+                            </div>
+                        </div>
+                        <div class="metric-group">
+                            <h4>Gyroscope</h4>
+                            <div class="metric-bar"><span>X</span>
+                                <div class="bar-track">
+                                    <div id="imu2-gx-bar" class="bar-fill gx-color"></div>
+                                </div> <span id="imu2-gx" class="val">0</span>
+                            </div>
+                            <div class="metric-bar"><span>Y</span>
+                                <div class="bar-track">
+                                    <div id="imu2-gy-bar" class="bar-fill gy-color"></div>
+                                </div> <span id="imu2-gy" class="val">0</span>
+                            </div>
+                            <div class="metric-bar"><span>Z</span>
+                                <div class="bar-track">
+                                    <div id="imu2-gz-bar" class="bar-fill gz-color"></div>
+                                </div> <span id="imu2-gz" class="val">0</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- IMU 3 -->
+                <div class="glass-panel imu-card imu-highlight">
+                    <h3>IMU 3 <span>(Bus 1: 0x68)</span></h3>
+                    <div class="metrics">
+                        <div class="metric-group">
+                            <h4>Accelerometer</h4>
+                            <div class="metric-bar"><span>X</span>
+                                <div class="bar-track">
+                                    <div id="imu3-ax-bar" class="bar-fill ax-color"></div>
+                                </div> <span id="imu3-ax" class="val">0</span>
+                            </div>
+                            <div class="metric-bar"><span>Y</span>
+                                <div class="bar-track">
+                                    <div id="imu3-ay-bar" class="bar-fill ay-color"></div>
+                                </div> <span id="imu3-ay" class="val">0</span>
+                            </div>
+                            <div class="metric-bar"><span>Z</span>
+                                <div class="bar-track">
+                                    <div id="imu3-az-bar" class="bar-fill az-color"></div>
+                                </div> <span id="imu3-az" class="val">0</span>
+                            </div>
+                        </div>
+                        <div class="metric-group">
+                            <h4>Gyroscope</h4>
+                            <div class="metric-bar"><span>X</span>
+                                <div class="bar-track">
+                                    <div id="imu3-gx-bar" class="bar-fill gx-color"></div>
+                                </div> <span id="imu3-gx" class="val">0</span>
+                            </div>
+                            <div class="metric-bar"><span>Y</span>
+                                <div class="bar-track">
+                                    <div id="imu3-gy-bar" class="bar-fill gy-color"></div>
+                                </div> <span id="imu3-gy" class="val">0</span>
+                            </div>
+                            <div class="metric-bar"><span>Z</span>
+                                <div class="bar-track">
+                                    <div id="imu3-gz-bar" class="bar-fill gz-color"></div>
+                                </div> <span id="imu3-gz" class="val">0</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- IMU 4 -->
+                <div class="glass-panel imu-card imu-highlight">
+                    <h3>IMU 4 <span>(Bus 1: 0x69)</span></h3>
+                    <div class="metrics">
+                        <div class="metric-group">
+                            <h4>Accelerometer</h4>
+                            <div class="metric-bar"><span>X</span>
+                                <div class="bar-track">
+                                    <div id="imu4-ax-bar" class="bar-fill ax-color"></div>
+                                </div> <span id="imu4-ax" class="val">0</span>
+                            </div>
+                            <div class="metric-bar"><span>Y</span>
+                                <div class="bar-track">
+                                    <div id="imu4-ay-bar" class="bar-fill ay-color"></div>
+                                </div> <span id="imu4-ay" class="val">0</span>
+                            </div>
+                            <div class="metric-bar"><span>Z</span>
+                                <div class="bar-track">
+                                    <div id="imu4-az-bar" class="bar-fill az-color"></div>
+                                </div> <span id="imu4-az" class="val">0</span>
+                            </div>
+                        </div>
+                        <div class="metric-group">
+                            <h4>Gyroscope</h4>
+                            <div class="metric-bar"><span>X</span>
+                                <div class="bar-track">
+                                    <div id="imu4-gx-bar" class="bar-fill gx-color"></div>
+                                </div> <span id="imu4-gx" class="val">0</span>
+                            </div>
+                            <div class="metric-bar"><span>Y</span>
+                                <div class="bar-track">
+                                    <div id="imu4-gy-bar" class="bar-fill gy-color"></div>
+                                </div> <span id="imu4-gy" class="val">0</span>
+                            </div>
+                            <div class="metric-bar"><span>Z</span>
+                                <div class="bar-track">
+                                    <div id="imu4-gz-bar" class="bar-fill gz-color"></div>
+                                </div> <span id="imu4-gz" class="val">0</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="logs glass-panel">
+            <h2>Serial Log <span id="conn-status" class="status-dot"></span></h2>
+            <div id="terminal" class="terminal-output">Waiting for connection...</div>
+        </section>
+    </main>
+
+    <script src="main.js"></script>
+</body>
+
+</html>
