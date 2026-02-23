@@ -111,11 +111,7 @@ idf.py monitor
 
 ## 📸 Screenshot
 
-Add your UI screenshot here:
-
-```markdown
-![Dashboard](assets/dashboard.png)
-```
+<img width="1853" height="939" alt="Screenshot 2026-02-23 171647" src="https://github.com/user-attachments/assets/5fd6eb04-45e5-460a-be08-e00b84bb2039" />
 
 ---
 
@@ -132,4 +128,4 @@ Add your UI screenshot here:
 ## 📜 License
 
 MIT License  
-(or your preferred license)
+
