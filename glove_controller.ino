@@ -19,6 +19,11 @@
  * NOTE: Sink wiring — D5 acts as GND
  *   Motor ON  → digitalWrite(5, LOW)   (completes circuit, motor runs)
  *   Motor OFF → digitalWrite(5, HIGH)  (breaks circuit, motor stops)
+ *
+ * TWO IMU WIRING:
+ *   IMU1 (MPU6050 #1): AD0 → GND   → I2C address 0x68
+ *   IMU2 (MPU6050 #2): AD0 → 3.3V  → I2C address 0x69
+ *   Both share the same SDA/SCL lines
  */
 
 #include <Wire.h>
@@ -27,11 +32,15 @@
 const int MOTOR_PIN  = 5;   // PWM-capable pin
 const int BUTTON_PIN = 2;   // Digital pin with INPUT_PULLUP
 
-// ── MPU6050 ───────────────────────────────────────────────────────────────────
-const int MPU_ADDR = 0x68;
+// ── MPU6050 ─────────────────────────────────────────────────────────────────────
+const uint8_t IMU_ADDR[2] = { 0x68, 0x69 };  // IMU1=AD0 low, IMU2=AD0 high
 
-int16_t accelX, accelY, accelZ;
-int16_t gyroX,  gyroY,  gyroZ;
+struct ImuData {
+  int16_t ax, ay, az;
+  int16_t gx, gy, gz;
+};
+
+ImuData imu[2];  // imu[0] = IMU1, imu[1] = IMU2
 
 // ── Motor ─────────────────────────────────────────────────────────────────────
 bool motorEnabled = false;  // toggled by button or serial command
@@ -49,41 +58,42 @@ unsigned long lastImuPrint = 0;
 const unsigned long IMU_INTERVAL = 200;  // ms
 
 // ─────────────────────────────────────────────────────────────────────────────
-void initMPU6050() {
-  Wire.beginTransmission(MPU_ADDR);
-  Wire.write(0x6B);  // PWR_MGMT_1 register
-  Wire.write(0);     // Wake up (clear sleep bit)
+void initIMU(uint8_t addr) {
+  Wire.beginTransmission(addr);
+  Wire.write(0x6B);  // PWR_MGMT_1
+  Wire.write(0);     // Wake up
   Wire.endTransmission(true);
 }
 
-void readMPU6050() {
-  Wire.beginTransmission(MPU_ADDR);
-  Wire.write(0x3B);  // ACCEL_XOUT_H starting register
+void readIMU(uint8_t addr, ImuData &d) {
+  Wire.beginTransmission(addr);
+  Wire.write(0x3B);  // ACCEL_XOUT_H
   Wire.endTransmission(false);
-  Wire.requestFrom(MPU_ADDR, (uint8_t)14, (uint8_t)true);
+  Wire.requestFrom(addr, (uint8_t)14, (uint8_t)true);
 
-  accelX = Wire.read() << 8 | Wire.read();
-  accelY = Wire.read() << 8 | Wire.read();
-  accelZ = Wire.read() << 8 | Wire.read();
-
-  Wire.read(); Wire.read();  // skip temperature (2 bytes)
-
-  gyroX = Wire.read() << 8 | Wire.read();
-  gyroY = Wire.read() << 8 | Wire.read();
-  gyroZ = Wire.read() << 8 | Wire.read();
+  d.ax = Wire.read() << 8 | Wire.read();
+  d.ay = Wire.read() << 8 | Wire.read();
+  d.az = Wire.read() << 8 | Wire.read();
+  Wire.read(); Wire.read();  // skip temperature
+  d.gx = Wire.read() << 8 | Wire.read();
+  d.gy = Wire.read() << 8 | Wire.read();
+  d.gz = Wire.read() << 8 | Wire.read();
 }
 
-void printIMU() {
-  // Format matches dashboard imuRegex:
-  // IMU1 | AX=X AY=Y AZ=Z | GX=X GY=Y GZ=Z | Motor: ON/OFF
-  Serial.print("IMU1 | AX="); Serial.print(accelX);
-  Serial.print(" AY=");       Serial.print(accelY);
-  Serial.print(" AZ=");       Serial.print(accelZ);
-  Serial.print(" | GX=");     Serial.print(gyroX);
-  Serial.print(" GY=");       Serial.print(gyroY);
-  Serial.print(" GZ=");       Serial.print(gyroZ);
-  Serial.print(" | Motor: ");
-  Serial.println(motorEnabled ? "ON" : "OFF");
+// label = "IMU1" or "IMU2", printMotor adds motor state to end of line
+void printIMU(const char* label, ImuData &d, bool printMotor) {
+  Serial.print(label);
+  Serial.print(" | AX="); Serial.print(d.ax);
+  Serial.print(" AY=");   Serial.print(d.ay);
+  Serial.print(" AZ=");   Serial.print(d.az);
+  Serial.print(" | GX="); Serial.print(d.gx);
+  Serial.print(" GY=");   Serial.print(d.gy);
+  Serial.print(" GZ=");   Serial.print(d.gz);
+  if (printMotor) {
+    Serial.print(" | Motor: ");
+    Serial.print(motorEnabled ? "ON" : "OFF");
+  }
+  Serial.println();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -138,9 +148,11 @@ void setup() {
 
   digitalWrite(MOTOR_PIN, HIGH);  // Start motor OFF (D5 HIGH = no current with sink wiring)
 
-  initMPU6050();
-  Serial.println("== Glove Controller Ready ==");
-  Serial.println("Press button to toggle motor.");
+  // Init both IMUs
+  initIMU(IMU_ADDR[0]);
+  initIMU(IMU_ADDR[1]);
+  Serial.println("== Glove Controller Ready (2x IMU) ==");
+  Serial.println("Press button or send 'M' to toggle motor.");
 
   delay(500);  // brief settle time
 }
@@ -149,11 +161,15 @@ void loop() {
   handleSerial();   // check for 'M' command from dashboard
   handleButton();
 
-  // IMU read + print at fixed interval
+  // Read + print both IMUs at fixed interval
   unsigned long now = millis();
   if (now - lastImuPrint >= IMU_INTERVAL) {
     lastImuPrint = now;
-    readMPU6050();
-    printIMU();
+
+    readIMU(IMU_ADDR[0], imu[0]);
+    readIMU(IMU_ADDR[1], imu[1]);
+
+    printIMU("IMU1", imu[0], false);   // IMU1 line (no motor field)
+    printIMU("IMU2", imu[1], true);    // IMU2 line (+ motor state at end)
   }
 }
