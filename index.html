@@ -5,8 +5,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Smart Glove Telemetry</title>
+    <meta name="description"
+        content="Real-time smart glove telemetry dashboard with 2D hand skeleton visualization, posture scoring, and tremor detection.">
     <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 
 <body>
@@ -16,195 +19,544 @@
     </div>
 
     <main class="dashboard">
+        <!-- ═══════════════ HEADER ═══════════════ -->
         <header class="glass-panel header">
             <div>
                 <h1>Smart Glove Telemetry</h1>
-                <p>ESP32 Real-time Data Visualization</p>
+                <p>ESP32 Real-time Hand Skeleton Visualization</p>
             </div>
-            <button id="connectBtn" class="primary-btn">Connect Serial</button>
+            <div class="header-right">
+                <div class="profile-group">
+                    <select id="profileSelect" class="profile-select">
+                        <option value="">— No Profile —</option>
+                    </select>
+                    <button id="calibrateBtn" class="secondary-btn">Calibrate</button>
+                    <button id="deleteProfileBtn" class="icon-btn" title="Delete profile">🗑</button>
+                </div>
+                <button id="testBtn" class="primary-btn"><span id="record-dot" class="status-dot hidden"></span><span
+                        id="test-text">Start Test</span></button>
+                <button id="analyzeBtn" class="secondary-btn hidden">Send to Analysis</button>
+                <span class="conn-label" style="margin-left:8px;">Status</span>
+                <span id="conn-status" class="status-dot"></span>
+                <button id="motorToggleBtn" class="secondary-btn" disabled
+                    title="Toggle motor on/off via serial command"
+                    style="opacity:0.4; cursor:not-allowed;">
+                    ⚡ Motor: OFF
+                </button>
+                <button id="connectBtn" class="primary-btn">Connect Serial</button>
+            </div>
         </header>
 
-        <section class="imu-sensors">
-            <h2 class="glass-panel-title"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"
-                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                    class="feather feather-activity">
+        <!-- ═══════════════ TOP ROW ═══════════════ -->
+        <div class="top-row">
+            <!-- Posture Score -->
+            <div class="glass-panel score-card" id="score-card">
+                <div class="card-label">POSTURE SCORE</div>
+                <div class="score-ring-wrap">
+                    <svg class="score-ring" viewBox="0 0 120 120">
+                        <defs>
+                            <linearGradient id="scoreGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" stop-color="#3fb950" />
+                                <stop offset="100%" stop-color="#56d364" />
+                            </linearGradient>
+                        </defs>
+                        <circle class="ring-bg" cx="60" cy="60" r="50" />
+                        <circle class="ring-fill" id="score-ring-fill" cx="60" cy="60" r="50" stroke-dasharray="0 314"
+                            stroke-dashoffset="0" stroke="url(#scoreGrad)" transform="rotate(-90 60 60)" />
+                    </svg>
+                    <div class="score-center">
+                        <span id="score-value" class="score-num">--</span>
+                        <span class="score-pct">%</span>
+                    </div>
+                </div>
+                <div id="score-label" class="score-state-label">Waiting...</div>
+            </div>
+
+            <!-- Tremor Meter -->
+            <div class="glass-panel tremor-card">
+                <div class="card-label">TREMOR STABILITY</div>
+                <div class="tremor-gauge-wrap">
+                    <svg class="tremor-arc" viewBox="0 0 120 70">
+                        <path class="arc-bg" d="M15,65 A50,50 0 0,1 105,65" fill="none" stroke-width="10"
+                            stroke-linecap="round" />
+                        <path class="arc-fill" id="tremor-arc-fill" d="M15,65 A50,50 0 0,1 105,65" fill="none"
+                            stroke-width="10" stroke-linecap="round" stroke-dasharray="0 157"
+                            stroke="url(#tremorGrad)" />
+                        <defs>
+                            <linearGradient id="tremorGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                                <stop offset="0%" stop-color="#3fb950" />
+                                <stop offset="50%" stop-color="#e3b341" />
+                                <stop offset="100%" stop-color="#f85149" />
+                            </linearGradient>
+                        </defs>
+                    </svg>
+                    <div class="tremor-value-row">
+                        <span id="tremor-rms" class="tremor-num">0.0</span>
+                        <span class="tremor-unit">RMS</span>
+                    </div>
+                </div>
+                <div id="tremor-state" class="tremor-state-label state-normal">Stable</div>
+            </div>
+        </div>
+
+        <!-- ═══════════════ HAND PANEL ═══════════════ -->
+        <div class="glass-panel hand-panel" id="hand-panel">
+            <div class="hand-panel-header">
+                <span class="card-label">HAND SKELETON</span>
+                <div class="finger-legend">
+                    <span class="legend-dot" style="background:#3fb950"></span> Normal
+                    <span class="legend-dot" style="background:#e3b341"></span> Warning
+                    <span class="legend-dot" style="background:#f85149"></span> Error
+                </div>
+                <div class="wrist-readout">
+                    Wrist Roll: <span id="wrist-roll-val">0°</span>
+                </div>
+            </div>
+
+            <div class="hand-svg-container">
+                <svg id="handSVG" viewBox="0 0 300 360" xmlns="http://www.w3.org/2000/svg">
+                    <defs>
+                        <!-- Glow filter for tremor -->
+                        <filter id="glow-normal" x="-30%" y="-30%" width="160%" height="160%">
+                            <feGaussianBlur stdDeviation="3" result="blur" />
+                            <feMerge>
+                                <feMergeNode in="blur" />
+                                <feMergeNode in="SourceGraphic" />
+                            </feMerge>
+                        </filter>
+                        <filter id="glow-warning" x="-30%" y="-30%" width="160%" height="160%">
+                            <feGaussianBlur stdDeviation="5" result="blur" />
+                            <feFlood flood-color="#e3b341" flood-opacity="0.6" result="color" />
+                            <feComposite in="color" in2="blur" operator="in" result="shadow" />
+                            <feMerge>
+                                <feMergeNode in="shadow" />
+                                <feMergeNode in="SourceGraphic" />
+                            </feMerge>
+                        </filter>
+                        <filter id="glow-error" x="-40%" y="-40%" width="180%" height="180%">
+                            <feGaussianBlur stdDeviation="7" result="blur" />
+                            <feFlood flood-color="#f85149" flood-opacity="0.8" result="color" />
+                            <feComposite in="color" in2="blur" operator="in" result="shadow" />
+                            <feMerge>
+                                <feMergeNode in="shadow" />
+                                <feMergeNode in="SourceGraphic" />
+                            </feMerge>
+                        </filter>
+                        <!-- Joint dot style -->
+                        <radialGradient id="jointGrad">
+                            <stop offset="0%" stop-color="#ffffff" />
+                            <stop offset="100%" stop-color="#8b949e" />
+                        </radialGradient>
+                    </defs>
+
+                    <!-- Wrist connector -->
+                    <line id="wristLine" x1="110" y1="300" x2="190" y2="300" stroke="#444c56" stroke-width="12"
+                        stroke-linecap="round" />
+
+                    <!-- ═══ HAND GROUP (rotates for wrist tilt) ═══ -->
+                    <g id="handGroup">
+                        <!-- Palm body -->
+                        <rect id="palm" x="90" y="195" width="120" height="100" rx="14" ry="14" fill="#1e2530"
+                            stroke="#444c56" stroke-width="2" />
+
+                        <!-- ── THUMB ──  base at (96, 240) pointing left-up -->
+                        <g id="thumb">
+                            <line id="thumb-seg1" x1="96" y1="240" x2="66" y2="210" stroke="#3fb950" stroke-width="7"
+                                stroke-linecap="round" />
+                            <circle cx="66" cy="210" r="4" fill="url(#jointGrad)" />
+                            <line id="thumb-seg2" x1="66" y1="210" x2="46" y2="190" stroke="#3fb950" stroke-width="6"
+                                stroke-linecap="round" />
+                            <circle cx="46" cy="190" r="3.5" fill="url(#jointGrad)" />
+                        </g>
+
+                        <!-- ── INDEX ──  base at (110, 195) -->
+                        <g id="index-finger">
+                            <line id="index-seg1" x1="110" y1="195" x2="110" y2="145" stroke="#3fb950" stroke-width="7"
+                                stroke-linecap="round" />
+                            <circle cx="110" cy="145" r="4" fill="url(#jointGrad)" />
+                            <line id="index-seg2" x1="110" y1="145" x2="110" y2="110" stroke="#3fb950" stroke-width="6"
+                                stroke-linecap="round" />
+                            <circle cx="110" cy="110" r="3.5" fill="url(#jointGrad)" />
+                        </g>
+
+                        <!-- ── MIDDLE ──  base at (140, 190) -->
+                        <g id="middle-finger">
+                            <line id="middle-seg1" x1="140" y1="190" x2="140" y2="135" stroke="#3fb950" stroke-width="7"
+                                stroke-linecap="round" />
+                            <circle cx="140" cy="135" r="4" fill="url(#jointGrad)" />
+                            <line id="middle-seg2" x1="140" y1="135" x2="140" y2="98" stroke="#3fb950" stroke-width="6"
+                                stroke-linecap="round" />
+                            <circle cx="140" cy="98" r="3.5" fill="url(#jointGrad)" />
+                        </g>
+
+                        <!-- ── RING ──  base at (168, 193) -->
+                        <g id="ring-finger">
+                            <line id="ring-seg1" x1="168" y1="193" x2="168" y2="143" stroke="#3fb950" stroke-width="7"
+                                stroke-linecap="round" />
+                            <circle cx="168" cy="143" r="4" fill="url(#jointGrad)" />
+                            <line id="ring-seg2" x1="168" y1="143" x2="168" y2="108" stroke="#3fb950" stroke-width="6"
+                                stroke-linecap="round" />
+                            <circle cx="168" cy="108" r="3.5" fill="url(#jointGrad)" />
+                        </g>
+
+                        <!-- ── PINKY ──  base at (193, 200) -->
+                        <g id="pinky-finger">
+                            <line id="pinky-seg1" x1="193" y1="200" x2="193" y2="158" stroke="#3fb950" stroke-width="7"
+                                stroke-linecap="round" />
+                            <circle cx="193" cy="158" r="4" fill="url(#jointGrad)" />
+                            <line id="pinky-seg2" x1="193" y1="158" x2="193" y2="128" stroke="#3fb950" stroke-width="6"
+                                stroke-linecap="round" />
+                            <circle cx="193" cy="128" r="3.5" fill="url(#jointGrad)" />
+                        </g>
+
+                        <!-- Palm knuckle dots -->
+                        <circle cx="110" cy="195" r="5" fill="#444c56" />
+                        <circle cx="140" cy="190" r="5" fill="#444c56" />
+                        <circle cx="168" cy="193" r="5" fill="#444c56" />
+                        <circle cx="193" cy="200" r="5" fill="#444c56" />
+                        <circle cx="96" cy="240" r="5" fill="#444c56" />
+                    </g>
+
+                    <!-- Wrist label -->
+                    <text x="150" y="330" text-anchor="middle" fill="#8b949e" font-size="11"
+                        font-family="'Outfit', sans-serif">WRIST</text>
+                </svg>
+
+                <!-- Finger angle labels overlay -->
+                <div class="finger-labels">
+                    <div class="fl fl-thumb" id="lbl-thumb">0°</div>
+                    <div class="fl fl-index" id="lbl-index">0°</div>
+                    <div class="fl fl-middle" id="lbl-middle">0°</div>
+                    <div class="fl fl-ring" id="lbl-ring">0°</div>
+                    <div class="fl fl-pinky" id="lbl-pinky">0°</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ═══════════════ BOTTOM ROW ═══════════════ -->
+        <div class="bottom-row">
+            <!-- Grip Stability -->
+            <div class="glass-panel grip-card">
+                <div class="card-label">GRIP STABILITY</div>
+                <div class="grip-bars">
+                    <div class="grip-row">
+                        <span class="grip-label">Index</span>
+                        <div class="grip-track">
+                            <div id="grip-index" class="grip-fill state-normal"></div>
+                        </div>
+                        <span id="grip-index-val" class="grip-val">0°</span>
+                    </div>
+                    <div class="grip-row">
+                        <span class="grip-label">Middle</span>
+                        <div class="grip-track">
+                            <div id="grip-middle" class="grip-fill state-normal"></div>
+                        </div>
+                        <span id="grip-middle-val" class="grip-val">0°</span>
+                    </div>
+                    <div class="grip-row">
+                        <span class="grip-label">Ring</span>
+                        <div class="grip-track">
+                            <div id="grip-ring" class="grip-fill state-normal"></div>
+                        </div>
+                        <span id="grip-ring-val" class="grip-val">0°</span>
+                    </div>
+                    <div class="grip-row">
+                        <span class="grip-label">Pinky</span>
+                        <div class="grip-track">
+                            <div id="grip-pinky" class="grip-fill state-normal"></div>
+                        </div>
+                        <span id="grip-pinky-val" class="grip-val">0°</span>
+                    </div>
+                    <div class="grip-row">
+                        <span class="grip-label">Thumb</span>
+                        <div class="grip-track">
+                            <div id="grip-thumb" class="grip-fill state-normal"></div>
+                        </div>
+                        <span id="grip-thumb-val" class="grip-val">0°</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Session Stats -->
+            <div class="glass-panel stats-card">
+                <div class="card-label">SESSION STATS</div>
+                <div class="stat-list">
+                    <div class="stat-item">
+                        <span class="stat-name">Uptime</span>
+                        <span class="stat-value" id="stat-uptime">00:00</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-name">Packets</span>
+                        <span class="stat-value" id="stat-packets">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-name">Wrist Roll</span>
+                        <span class="stat-value" id="stat-wrist">0°</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-name">Flex 1 Raw</span>
+                        <span class="stat-value" id="stat-flex1">—</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-name">Flex 2 Raw</span>
+                        <span class="stat-value" id="stat-flex2">—</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-name">Status</span>
+                        <span class="stat-value" id="stat-status">Disconnected</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-name">Motor</span>
+                        <span class="stat-value" id="stat-motor" style="color: var(--col-normal);">—</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ═══════════════ ANALYSIS RESULTS OVERLAY ═══════════════ -->
+        <div id="results-panel" class="glass-panel results-panel hidden">
+            <div class="results-header">
+                <h2>Tremor Analysis Results</h2>
+                <button id="results-close" class="results-close">&times;</button>
+            </div>
+            <div class="results-severity-wrap">
+                <span id="results-severity" class="results-severity">Normal</span>
+            </div>
+            <div class="results-stats">
+                <div class="results-stat"><span>Duration</span><span id="res-duration">0s</span></div>
+                <div class="results-stat"><span>Avg Tremor</span><span id="res-avg">0</span></div>
+                <div class="results-stat"><span>Peak Tremor</span><span id="res-peak">0</span></div>
+                <div class="results-stat"><span>Min Tremor</span><span id="res-min">0</span></div>
+                <div class="results-stat"><span>Samples</span><span id="res-samples">0</span></div>
+            </div>
+            <div class="results-zones">
+                <div class="zone-bar-wrap">
+                    <div class="zone-segment zone-normal" id="zone-bar-normal"></div>
+                    <div class="zone-segment zone-mild" id="zone-bar-mild"></div>
+                    <div class="zone-segment zone-moderate" id="zone-bar-moderate"></div>
+                    <div class="zone-segment zone-severe" id="zone-bar-severe"></div>
+                </div>
+                <div class="zone-labels">
+                    <span class="zone-lbl"><span class="legend-dot" style="background:#3fb950"></span> Normal <span
+                            id="zone-pct-normal">0%</span></span>
+                    <span class="zone-lbl"><span class="legend-dot" style="background:#e3b341"></span> Mild <span
+                            id="zone-pct-mild">0%</span></span>
+                    <span class="zone-lbl"><span class="legend-dot" style="background:#f0883e"></span> Moderate <span
+                            id="zone-pct-moderate">0%</span></span>
+                    <span class="zone-lbl"><span class="legend-dot" style="background:#f85149"></span> Severe <span
+                            id="zone-pct-severe">0%</span></span>
+                </div>
+            </div>
+            <button id="results-download" class="primary-btn" style="width:100%; margin-top:14px;">Download
+                Report</button>
+        </div>
+
+        <!-- ═══════════════ SERIAL LOG ═══════════════ -->
+        <section class="logs glass-panel">
+            <h2>Serial Log <span id="log-conn-status" class="status-dot"></span></h2>
+            <div id="terminal" class="terminal-output">Waiting for connection...</div>
+        </section>
+
+        <!-- ═══════════════ TREMOR GRAPH ═══════════════ -->
+        <section class="glass-panel" style="margin-bottom: 20px;">
+            <div class="section-heading" style="margin-bottom: 12px;">
+                <div style="font-size: 14px; font-weight: 600; color: var(--text-secondary); display: flex; align-items: center; gap: 8px;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
+                    </svg>
+                    LIVE TREMOR GRAPH (GYRO X)
+                </div>
+            </div>
+            <div style="width: 100%; height: 220px; position: relative;">
+                <canvas id="tremorChart"></canvas>
+            </div>
+        </section>
+
+        <!-- ═══════════════ RAW IMU VALUES ═══════════════ -->
+        <section class="raw-imu-section">
+            <div class="section-heading">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
                     <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
-                </svg> IMU Motion Data</h2>
-            <div class="imu-grid">
-                <!-- IMU 1 -->
-                <div class="glass-panel imu-card imu-highlight">
-                    <h3>IMU 1 <span>(Bus 0: 0x68)</span></h3>
-                    <div class="metrics">
-                        <div class="metric-group">
+                </svg>
+                Raw IMU Data
+            </div>
+            <div class="raw-imu-grid">
+
+                <!-- IMU 1 → Pinky -->
+                <div class="glass-panel imu-raw-card">
+                    <h3>IMU 1 <span>Pinky · (Bus 0: 0x68)</span></h3>
+                    <div class="raw-metrics">
+                        <div class="raw-group">
                             <h4>Accelerometer</h4>
                             <div class="metric-bar"><span>X</span>
                                 <div class="bar-track">
                                     <div id="imu1-ax-bar" class="bar-fill ax-color"></div>
-                                </div> <span id="imu1-ax" class="val">0</span>
+                                </div><span id="imu1-ax" class="val">0</span>
                             </div>
                             <div class="metric-bar"><span>Y</span>
                                 <div class="bar-track">
                                     <div id="imu1-ay-bar" class="bar-fill ay-color"></div>
-                                </div> <span id="imu1-ay" class="val">0</span>
+                                </div><span id="imu1-ay" class="val">0</span>
                             </div>
                             <div class="metric-bar"><span>Z</span>
                                 <div class="bar-track">
                                     <div id="imu1-az-bar" class="bar-fill az-color"></div>
-                                </div> <span id="imu1-az" class="val">0</span>
+                                </div><span id="imu1-az" class="val">0</span>
                             </div>
                         </div>
-                        <div class="metric-group">
+                        <div class="raw-group">
                             <h4>Gyroscope</h4>
                             <div class="metric-bar"><span>X</span>
                                 <div class="bar-track">
                                     <div id="imu1-gx-bar" class="bar-fill gx-color"></div>
-                                </div> <span id="imu1-gx" class="val">0</span>
+                                </div><span id="imu1-gx" class="val">0</span>
                             </div>
                             <div class="metric-bar"><span>Y</span>
                                 <div class="bar-track">
                                     <div id="imu1-gy-bar" class="bar-fill gy-color"></div>
-                                </div> <span id="imu1-gy" class="val">0</span>
+                                </div><span id="imu1-gy" class="val">0</span>
                             </div>
                             <div class="metric-bar"><span>Z</span>
                                 <div class="bar-track">
                                     <div id="imu1-gz-bar" class="bar-fill gz-color"></div>
-                                </div> <span id="imu1-gz" class="val">0</span>
+                                </div><span id="imu1-gz" class="val">0</span>
                             </div>
                         </div>
                     </div>
                 </div>
-                <!-- IMU 2 -->
-                <div class="glass-panel imu-card imu-highlight">
-                    <h3>IMU 2 <span>(Bus 0: 0x69)</span></h3>
-                    <div class="metrics">
-                        <div class="metric-group">
+
+                <!-- IMU 2 → Middle -->
+                <div class="glass-panel imu-raw-card">
+                    <h3>IMU 2 <span>Middle · (Bus 0: 0x69)</span></h3>
+                    <div class="raw-metrics">
+                        <div class="raw-group">
                             <h4>Accelerometer</h4>
                             <div class="metric-bar"><span>X</span>
                                 <div class="bar-track">
                                     <div id="imu2-ax-bar" class="bar-fill ax-color"></div>
-                                </div> <span id="imu2-ax" class="val">0</span>
+                                </div><span id="imu2-ax" class="val">0</span>
                             </div>
                             <div class="metric-bar"><span>Y</span>
                                 <div class="bar-track">
                                     <div id="imu2-ay-bar" class="bar-fill ay-color"></div>
-                                </div> <span id="imu2-ay" class="val">0</span>
+                                </div><span id="imu2-ay" class="val">0</span>
                             </div>
                             <div class="metric-bar"><span>Z</span>
                                 <div class="bar-track">
                                     <div id="imu2-az-bar" class="bar-fill az-color"></div>
-                                </div> <span id="imu2-az" class="val">0</span>
+                                </div><span id="imu2-az" class="val">0</span>
                             </div>
                         </div>
-                        <div class="metric-group">
+                        <div class="raw-group">
                             <h4>Gyroscope</h4>
                             <div class="metric-bar"><span>X</span>
                                 <div class="bar-track">
                                     <div id="imu2-gx-bar" class="bar-fill gx-color"></div>
-                                </div> <span id="imu2-gx" class="val">0</span>
+                                </div><span id="imu2-gx" class="val">0</span>
                             </div>
                             <div class="metric-bar"><span>Y</span>
                                 <div class="bar-track">
                                     <div id="imu2-gy-bar" class="bar-fill gy-color"></div>
-                                </div> <span id="imu2-gy" class="val">0</span>
+                                </div><span id="imu2-gy" class="val">0</span>
                             </div>
                             <div class="metric-bar"><span>Z</span>
                                 <div class="bar-track">
                                     <div id="imu2-gz-bar" class="bar-fill gz-color"></div>
-                                </div> <span id="imu2-gz" class="val">0</span>
+                                </div><span id="imu2-gz" class="val">0</span>
                             </div>
                         </div>
                     </div>
                 </div>
-                <!-- IMU 3 -->
-                <div class="glass-panel imu-card imu-highlight">
-                    <h3>IMU 3 <span>(Bus 1: 0x68)</span></h3>
-                    <div class="metrics">
-                        <div class="metric-group">
+
+                <!-- IMU 3 → Index -->
+                <div class="glass-panel imu-raw-card">
+                    <h3>IMU 3 <span>Index · (Bus 1: 0x68)</span></h3>
+                    <div class="raw-metrics">
+                        <div class="raw-group">
                             <h4>Accelerometer</h4>
                             <div class="metric-bar"><span>X</span>
                                 <div class="bar-track">
                                     <div id="imu3-ax-bar" class="bar-fill ax-color"></div>
-                                </div> <span id="imu3-ax" class="val">0</span>
+                                </div><span id="imu3-ax" class="val">0</span>
                             </div>
                             <div class="metric-bar"><span>Y</span>
                                 <div class="bar-track">
                                     <div id="imu3-ay-bar" class="bar-fill ay-color"></div>
-                                </div> <span id="imu3-ay" class="val">0</span>
+                                </div><span id="imu3-ay" class="val">0</span>
                             </div>
                             <div class="metric-bar"><span>Z</span>
                                 <div class="bar-track">
                                     <div id="imu3-az-bar" class="bar-fill az-color"></div>
-                                </div> <span id="imu3-az" class="val">0</span>
+                                </div><span id="imu3-az" class="val">0</span>
                             </div>
                         </div>
-                        <div class="metric-group">
+                        <div class="raw-group">
                             <h4>Gyroscope</h4>
                             <div class="metric-bar"><span>X</span>
                                 <div class="bar-track">
                                     <div id="imu3-gx-bar" class="bar-fill gx-color"></div>
-                                </div> <span id="imu3-gx" class="val">0</span>
+                                </div><span id="imu3-gx" class="val">0</span>
                             </div>
                             <div class="metric-bar"><span>Y</span>
                                 <div class="bar-track">
                                     <div id="imu3-gy-bar" class="bar-fill gy-color"></div>
-                                </div> <span id="imu3-gy" class="val">0</span>
+                                </div><span id="imu3-gy" class="val">0</span>
                             </div>
                             <div class="metric-bar"><span>Z</span>
                                 <div class="bar-track">
                                     <div id="imu3-gz-bar" class="bar-fill gz-color"></div>
-                                </div> <span id="imu3-gz" class="val">0</span>
+                                </div><span id="imu3-gz" class="val">0</span>
                             </div>
                         </div>
                     </div>
                 </div>
-                <!-- IMU 4 -->
-                <div class="glass-panel imu-card imu-highlight">
-                    <h3>IMU 4 <span>(Bus 1: 0x69)</span></h3>
-                    <div class="metrics">
-                        <div class="metric-group">
+
+                <!-- IMU 4 → Thumb -->
+                <div class="glass-panel imu-raw-card">
+                    <h3>IMU 4 <span>Thumb · (Bus 1: 0x69)</span></h3>
+                    <div class="raw-metrics">
+                        <div class="raw-group">
                             <h4>Accelerometer</h4>
                             <div class="metric-bar"><span>X</span>
                                 <div class="bar-track">
                                     <div id="imu4-ax-bar" class="bar-fill ax-color"></div>
-                                </div> <span id="imu4-ax" class="val">0</span>
+                                </div><span id="imu4-ax" class="val">0</span>
                             </div>
                             <div class="metric-bar"><span>Y</span>
                                 <div class="bar-track">
                                     <div id="imu4-ay-bar" class="bar-fill ay-color"></div>
-                                </div> <span id="imu4-ay" class="val">0</span>
+                                </div><span id="imu4-ay" class="val">0</span>
                             </div>
                             <div class="metric-bar"><span>Z</span>
                                 <div class="bar-track">
                                     <div id="imu4-az-bar" class="bar-fill az-color"></div>
-                                </div> <span id="imu4-az" class="val">0</span>
+                                </div><span id="imu4-az" class="val">0</span>
                             </div>
                         </div>
-                        <div class="metric-group">
+                        <div class="raw-group">
                             <h4>Gyroscope</h4>
                             <div class="metric-bar"><span>X</span>
                                 <div class="bar-track">
                                     <div id="imu4-gx-bar" class="bar-fill gx-color"></div>
-                                </div> <span id="imu4-gx" class="val">0</span>
+                                </div><span id="imu4-gx" class="val">0</span>
                             </div>
                             <div class="metric-bar"><span>Y</span>
                                 <div class="bar-track">
                                     <div id="imu4-gy-bar" class="bar-fill gy-color"></div>
-                                </div> <span id="imu4-gy" class="val">0</span>
+                                </div><span id="imu4-gy" class="val">0</span>
                             </div>
                             <div class="metric-bar"><span>Z</span>
                                 <div class="bar-track">
                                     <div id="imu4-gz-bar" class="bar-fill gz-color"></div>
-                                </div> <span id="imu4-gz" class="val">0</span>
+                                </div><span id="imu4-gz" class="val">0</span>
                             </div>
                         </div>
                     </div>
                 </div>
-            </div>
-        </section>
 
-        <section class="logs glass-panel">
-            <h2>Serial Log <span id="conn-status" class="status-dot"></span></h2>
-            <div id="terminal" class="terminal-output">Waiting for connection...</div>
+            </div>
         </section>
     </main>
 
